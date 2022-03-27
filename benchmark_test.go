@@ -18,7 +18,7 @@ import (
 )
 
 func BenchmarkIssue84(b *testing.B) {
-	numRecords := 10000
+	numRecords := 1000
 
 	b.Run("parquet_go_floor_reflection", func(b *testing.B) {
 		for n := 0; n < b.N; n++ {
