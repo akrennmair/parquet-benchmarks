@@ -1,6 +1,7 @@
 package benchmark_test
 
 import (
+	"math/rand"
 	"os"
 	"testing"
 
@@ -17,19 +18,45 @@ import (
 	"github.com/xitongsys/parquet-go/writer"
 )
 
-func BenchmarkIssue84(b *testing.B) {
-	numRecords := 1000
-	prefix := "issue84_"
+func BenchmarkInt32Writing(b *testing.B) {
+	numRecords := 1000000
 
+	b.Run("high_card", func(b *testing.B) {
+		prefix := "int32wr_highcard_"
+
+		data := make([]int32, numRecords)
+
+		for i := range data {
+			data[i] = rand.Int31()
+		}
+
+		benchmarkInt32Writing(b, data, prefix)
+	})
+
+	b.Run("low_card", func(b *testing.B) {
+		prefix := "int32wr_lowcard_"
+		cardinality := int32(1516)
+
+		data := make([]int32, numRecords)
+
+		for i := range data {
+			data[i] = rand.Int31n(cardinality)
+		}
+
+		benchmarkInt32Writing(b, data, prefix)
+	})
+
+}
+
+const int32WritingSchema = `message test {
+	required int32 foo;
+}`
+
+func benchmarkInt32Writing(b *testing.B, data []int32, prefix string) {
 	b.Run("parquet_go_floor_reflection", func(b *testing.B) {
 		for n := 0; n < b.N; n++ {
 			func() {
-				schemaDef, err := parquetschema.ParseSchemaDefinition(
-					`message test {
-						required binary format (STRING);
-						required int32 data_type;
-						required binary country (STRING);
-					}`)
+				schemaDef, err := parquetschema.ParseSchemaDefinition(int32WritingSchema)
 				if err != nil {
 					b.Fatalf("Parsing schema definition failed: %v", err)
 				}
@@ -45,16 +72,12 @@ func BenchmarkIssue84(b *testing.B) {
 				}
 
 				type record struct {
-					Format   string `parquet:"format"`
-					DataType int32  `parquet:"data_type"`
-					Country  string `parquet:"country"`
+					Foo int32 `parquet:"foo"`
 				}
 
-				for i := 0; i < numRecords; i++ {
+				for _, num := range data {
 					stu := record{
-						Format:   "Test",
-						DataType: 1,
-						Country:  "IN",
+						Foo: num,
 					}
 					if err = fw.Write(stu); err != nil {
 						b.Fatalf("Write error: %v", err)
@@ -71,12 +94,7 @@ func BenchmarkIssue84(b *testing.B) {
 	b.Run("parquet_go_floor_marshalling", func(b *testing.B) {
 		for n := 0; n < b.N; n++ {
 			func() {
-				schemaDef, err := parquetschema.ParseSchemaDefinition(
-					`message test {
-						required binary format (STRING);
-						required int32 data_type;
-						required binary country (STRING);
-					}`)
+				schemaDef, err := parquetschema.ParseSchemaDefinition(int32WritingSchema)
 				if err != nil {
 					b.Fatalf("Parsing schema definition failed: %v", err)
 				}
@@ -91,13 +109,9 @@ func BenchmarkIssue84(b *testing.B) {
 					b.Fatalf("Opening parquet file for writing failed: %v", err)
 				}
 
-				for i := 0; i < numRecords; i++ {
-					stu := &marshalRecord{
-						Format:   "Test",
-						DataType: 1,
-						Country:  "IN",
-					}
-					if err = fw.Write(stu); err != nil {
+				for _, num := range data {
+					r := int32Record(num)
+					if err = fw.Write(&r); err != nil {
 						b.Fatalf("Write error: %v", err)
 					}
 				}
@@ -112,12 +126,7 @@ func BenchmarkIssue84(b *testing.B) {
 	b.Run("parquet_go_lowlevel", func(b *testing.B) {
 		for n := 0; n < b.N; n++ {
 			func() {
-				schemaDef, err := parquetschema.ParseSchemaDefinition(
-					`message test {
-						required binary format (STRING);
-						required int32 data_type;
-						required binary country (STRING);
-					}`)
+				schemaDef, err := parquetschema.ParseSchemaDefinition(int32WritingSchema)
 				if err != nil {
 					b.Fatalf("Parsing schema definition failed: %v", err)
 				}
@@ -134,11 +143,9 @@ func BenchmarkIssue84(b *testing.B) {
 				fw := goparquet.NewFileWriter(w, goparquet.WithSchemaDefinition(schemaDef),
 					goparquet.WithCompressionCodec(parquet.CompressionCodec_SNAPPY))
 
-				for i := 0; i < numRecords; i++ {
+				for _, num := range data {
 					stu := map[string]interface{}{
-						"format":    []byte("Test"),
-						"data_type": int32(1),
-						"country":   []byte("IN"),
+						"foo": num,
 					}
 					if err = fw.AddData(stu); err != nil {
 						b.Fatalf("Write error: %v", err)
@@ -163,9 +170,7 @@ func BenchmarkIssue84(b *testing.B) {
 				}
 
 				type record struct {
-					Format   string `parquet:"name=format, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
-					DataType int32  `parquet:"name=data_type, type=INT32, encoding=PLAIN"`
-					Country  string `parquet:"name=country, type=BYTE_ARRAY, convertedtype=UTF8, encoding=PLAIN_DICTIONARY"`
+					Foo int32 `parquet:"name=data_type, type=INT32, encoding=PLAIN"`
 				}
 
 				//write
@@ -176,11 +181,9 @@ func BenchmarkIssue84(b *testing.B) {
 
 				pw.CompressionType = parquet2.CompressionCodec_SNAPPY
 
-				for i := 0; i < numRecords; i++ {
+				for _, num := range data {
 					stu := record{
-						Format:   "Test",
-						DataType: 1,
-						Country:  "IN",
+						Foo: num,
 					}
 					if err = pw.Write(stu); err != nil {
 						b.Fatalf("Write error: %v", err)
@@ -204,9 +207,7 @@ func BenchmarkIssue84(b *testing.B) {
 				}
 
 				sc, err := schema.NewGroupNode("test", parquet3.Repetitions.Required, schema.FieldList{
-					schema.MustPrimitive(schema.NewPrimitiveNodeLogical("format", parquet3.Repetitions.Required, &schema.StringLogicalType{}, parquet3.Types.ByteArray, 0, 0)),
-					schema.MustPrimitive(schema.NewPrimitiveNode("data_type", parquet3.Repetitions.Required, parquet3.Types.Int32, 0, 0)),
-					schema.MustPrimitive(schema.NewPrimitiveNodeLogical("country", parquet3.Repetitions.Required, &schema.StringLogicalType{}, parquet3.Types.ByteArray, 0, 0)),
+					schema.MustPrimitive(schema.NewPrimitiveNode("foo", parquet3.Repetitions.Required, parquet3.Types.Int32, 0, 0)),
 				}, 0)
 
 				pw := file.NewParquetWriter(w, sc, file.WithWriterProps(parquet3.NewWriterProperties(parquet3.WithCompression(compress.Codecs.Snappy))))
@@ -219,53 +220,16 @@ func BenchmarkIssue84(b *testing.B) {
 					b.Fatalf("NextColumn failed: %v", err)
 				}
 
-				formatCol, ok := col.(*file.ByteArrayColumnChunkWriter)
+				fooCol, ok := col.(*file.Int32ColumnChunkWriter)
 				if !ok {
-					b.Fatalf("couldn't assert first column which is %T", col)
+					b.Fatalf("couldn't assert foo column which is %T", col)
 				}
 
-				for i := 0; i < numRecords; i++ {
-					if _, err := formatCol.WriteBatch([]parquet3.ByteArray{[]byte("Test")}, nil, nil); err != nil {
-						b.Fatalf("WriteBatch failed: %v", err)
-					}
-				}
-				formatCol.Close()
-
-				col, err = rg.NextColumn()
-				if err != nil {
-					b.Fatalf("NextColumn failed: %v", err)
+				if _, err := fooCol.WriteBatch(data, nil, nil); err != nil {
+					b.Fatalf("WriteBatch failed: %v", err)
 				}
 
-				dataTypeCol, ok := col.(*file.Int32ColumnChunkWriter)
-				if !ok {
-					b.Fatalf("couldn't assert second column which is %T", col)
-				}
-
-				for i := 0; i < numRecords; i++ {
-					if _, err := dataTypeCol.WriteBatch([]int32{1}, nil, nil); err != nil {
-						b.Fatalf("WriteBatch failed: %v", err)
-					}
-				}
-
-				dataTypeCol.Close()
-
-				col, err = rg.NextColumn()
-				if err != nil {
-					b.Fatalf("NextColumn failed: %v", err)
-				}
-
-				countryCol, ok := col.(*file.ByteArrayColumnChunkWriter)
-				if !ok {
-					b.Fatalf("couldn't assert third column which is %T", col)
-				}
-
-				for i := 0; i < numRecords; i++ {
-					if _, err := countryCol.WriteBatch([]parquet3.ByteArray{[]byte("IN")}, nil, nil); err != nil {
-						b.Fatalf("WriteBatch failed: %v", err)
-					}
-				}
-
-				countryCol.Close()
+				fooCol.Close()
 
 				defer rg.Close()
 			}()
@@ -273,15 +237,9 @@ func BenchmarkIssue84(b *testing.B) {
 	})
 }
 
-type marshalRecord struct {
-	Format   string
-	DataType int32
-	Country  string
-}
+type int32Record int32
 
-func (r *marshalRecord) MarshalParquet(obj interfaces.MarshalObject) error {
-	obj.AddField("format").SetByteArray([]byte(r.Format))
-	obj.AddField("data_type").SetInt32(r.DataType)
-	obj.AddField("country").SetByteArray([]byte(r.Country))
+func (r int32Record) MarshalParquet(obj interfaces.MarshalObject) error {
+	obj.AddField("foo").SetInt32(int32(r))
 	return nil
 }
