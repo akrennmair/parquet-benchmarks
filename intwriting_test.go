@@ -170,7 +170,7 @@ func benchmarkInt32Writing(b *testing.B, data []int32, prefix string) {
 				}
 
 				type record struct {
-					Foo int32 `parquet:"name=data_type, type=INT32, encoding=PLAIN"`
+					Foo int32 `parquet:"name=data_type, type=INT32, encoding=PLAIN_DICTIONARY"`
 				}
 
 				//write
