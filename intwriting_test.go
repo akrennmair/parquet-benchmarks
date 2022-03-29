@@ -159,10 +159,83 @@ func benchmarkInt32Writing(b *testing.B, data []int32, prefix string) {
 		}
 	})
 
-	b.Run("xitongsys_parquet_go", func(b *testing.B) {
+	b.Run("parquet_go_lowlevel_disabledict", func(b *testing.B) {
 		for n := 0; n < b.N; n++ {
 			func() {
-				filename := prefix + "xitongsys_parquet_go.parquet"
+				parquetFilename := prefix + "parquet_go_lowlevel_disabledict.parquet"
+
+				w, err := os.OpenFile(parquetFilename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+				if err != nil {
+					b.Fatalf("Opening %s failed: %v", parquetFilename, err)
+				}
+
+				defer w.Close()
+
+				fw := goparquet.NewFileWriter(w, goparquet.WithCompressionCodec(parquet.CompressionCodec_SNAPPY))
+				int32Store, err := goparquet.NewInt32Store(parquet.Encoding_PLAIN, false, &goparquet.ColumnParameters{})
+				if err != nil {
+					b.Fatalf("NewInt32Store failed: %v", err)
+				}
+				fw.AddColumn("foo", goparquet.NewDataColumn(int32Store, parquet.FieldRepetitionType_REQUIRED))
+
+				for _, num := range data {
+					stu := map[string]interface{}{
+						"foo": num,
+					}
+					if err = fw.AddData(stu); err != nil {
+						b.Fatalf("Write error: %v", err)
+					}
+				}
+
+				if err := fw.Close(); err != nil {
+					b.Fatalf("Closing parquet writer failed: %v", err)
+				}
+			}()
+		}
+	})
+
+	b.Run("xitongsys_parquet_go_plain", func(b *testing.B) {
+		for n := 0; n < b.N; n++ {
+			func() {
+				filename := prefix + "xitongsys_parquet_go_plain.parquet"
+
+				w, err := os.Create(filename)
+				if err != nil {
+					b.Fatalf("Can't create local file: %v", err)
+				}
+
+				type record struct {
+					Foo int32 `parquet:"name=data_type, type=INT32, encoding=PLAIN"`
+				}
+
+				//write
+				pw, err := writer.NewParquetWriterFromWriter(w, new(record), 4)
+				if err != nil {
+					b.Fatalf("Can't create parquet writer: %v", err)
+				}
+
+				pw.CompressionType = parquet2.CompressionCodec_SNAPPY
+
+				for _, num := range data {
+					stu := record{
+						Foo: num,
+					}
+					if err = pw.Write(stu); err != nil {
+						b.Fatalf("Write error: %v", err)
+					}
+				}
+				if err = pw.WriteStop(); err != nil {
+					b.Fatalf("WriteStop error: %v", err)
+				}
+				w.Close()
+			}()
+		}
+	})
+
+	b.Run("xitongsys_parquet_go_plaindict", func(b *testing.B) {
+		for n := 0; n < b.N; n++ {
+			func() {
+				filename := prefix + "xitongsys_parquet_go_plaindict.parquet"
 
 				w, err := os.Create(filename)
 				if err != nil {

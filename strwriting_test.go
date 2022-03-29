@@ -153,7 +153,7 @@ func BenchmarkStringWriting(b *testing.B) {
 	b.Run("parquet_go_lowlevel_disabledict", func(b *testing.B) {
 		for n := 0; n < b.N; n++ {
 			func() {
-				parquetFilename := prefix + "parquet_go_lowlevel_nodict.parquet"
+				parquetFilename := prefix + "parquet_go_lowlevel_disabledict.parquet"
 
 				w, err := os.OpenFile(parquetFilename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 				if err != nil {
