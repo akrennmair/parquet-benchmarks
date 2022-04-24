@@ -275,14 +275,45 @@ func BenchmarkStringWriting(b *testing.B) {
 		}
 	})
 
-	b.Run("segmentio_parquet_go", func(b *testing.B) {
+	b.Run("segmentio_parquet_go_plain", func(b *testing.B) {
 		type record struct {
 			Word string `parquet:"word"`
 		}
 
 		for n := 0; n < b.N; n++ {
 			func() {
-				parquetFilename := prefix + "segmentio.parquet"
+				parquetFilename := prefix + "segmentio_nodict.parquet"
+
+				f, err := os.Create(parquetFilename)
+				if err != nil {
+					b.Fatalf("Creating %s failed: %v", parquetFilename, err)
+				}
+
+				wr := parquet4.NewWriter(f, parquet4.SchemaOf(new(record)), parquet4.Compression(&snappy.Codec{}))
+
+				for _, word := range words {
+					if err := wr.Write(&record{
+						Word: word,
+					}); err != nil {
+						b.Fatalf("Write failed: %v", err)
+					}
+				}
+
+				if err := wr.Close(); err != nil {
+					b.Fatalf("Closing parquet writer failed: %v", err)
+				}
+			}()
+		}
+	})
+
+	b.Run("segmentio_parquet_go_dict", func(b *testing.B) {
+		type record struct {
+			Word string `parquet:"word,dict"`
+		}
+
+		for n := 0; n < b.N; n++ {
+			func() {
+				parquetFilename := prefix + "segmentio_dict.parquet"
 
 				f, err := os.Create(parquetFilename)
 				if err != nil {

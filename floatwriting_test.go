@@ -112,6 +112,12 @@ func BenchmarkSparseFloat64Writing(b *testing.B) {
 	})
 
 	b.Run("segmentio_parquet_go", func(b *testing.B) {
+		defer func() {
+			if err := recover(); err != nil {
+				b.Fatalf("benchmark paniced: %v", err)
+			}
+		}()
+
 		type record struct {
 			Data []*float64 `parquet:"data,list"`
 		}
