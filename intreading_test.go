@@ -12,6 +12,7 @@ import (
 	"github.com/fraugster/parquet-go/floor/interfaces"
 	"github.com/fraugster/parquet-go/parquet"
 	"github.com/fraugster/parquet-go/parquetschema"
+	parquet4 "github.com/segmentio/parquet-go"
 	"github.com/xitongsys/parquet-go-source/local"
 	"github.com/xitongsys/parquet-go/reader"
 )
@@ -148,7 +149,7 @@ func benchmarkInt32Reading(b *testing.B, data []int32, prefix string) {
 		}
 		for i := 0; i < b.N; i++ {
 			func() {
-				fr, err := local.NewLocalFileReader("int32reading_testdata.parquet")
+				fr, err := local.NewLocalFileReader(parquetFilename)
 				if err != nil {
 					b.Fatalf("Can't open file: %v", err)
 				}
@@ -179,6 +180,31 @@ func benchmarkInt32Reading(b *testing.B, data []int32, prefix string) {
 
 				pr.ReadStop()
 				fr.Close()
+			}()
+		}
+	})
+
+	b.Run("segmentio", func(b *testing.B) {
+		type record struct {
+			Foo int32 `parquet:"foo"`
+		}
+		for i := 0; i < b.N; i++ {
+			func() {
+				f, err := os.Open(parquetFilename)
+				if err != nil {
+					b.Fatalf("Opening file failed: %v", err)
+				}
+				defer f.Close()
+				r := parquet4.NewReader(f)
+				for {
+					var rec record
+					if err := r.Read(&rec); err != nil {
+						if errors.Is(err, io.EOF) {
+							break
+						}
+						b.Fatalf("Read failed: %v", err)
+					}
+				}
 			}()
 		}
 	})
