@@ -8,6 +8,8 @@ import (
 	goparquet "github.com/fraugster/parquet-go"
 	"github.com/fraugster/parquet-go/parquet"
 	"github.com/fraugster/parquet-go/parquetschema"
+	parquet4 "github.com/segmentio/parquet-go"
+	"github.com/segmentio/parquet-go/compress/snappy"
 	parquet2 "github.com/xitongsys/parquet-go/parquet"
 	"github.com/xitongsys/parquet-go/writer"
 )
@@ -105,6 +107,38 @@ func BenchmarkSparseFloat64Writing(b *testing.B) {
 					b.Fatalf("WriteStop error: %v", err)
 				}
 				w.Close()
+			}()
+		}
+	})
+
+	b.Run("segmentio_parquet_go", func(b *testing.B) {
+		type record struct {
+			Data []*float64 `parquet:"data,list"`
+		}
+
+		for n := 0; n < b.N; n++ {
+			func() {
+				parquetFilename := "float64wr_segmentio.parquet"
+
+				f, err := os.Create(parquetFilename)
+				if err != nil {
+					b.Fatalf("Creating %s failed: %v", parquetFilename, err)
+				}
+
+				wr := parquet4.NewWriter(f, parquet4.SchemaOf(new(record)), parquet4.Compression(&snappy.Codec{}))
+
+				for _, dataList := range testData {
+					rec := record{
+						Data: dataList,
+					}
+					if err = wr.Write(rec); err != nil {
+						b.Fatalf("Write error: %v", err)
+					}
+				}
+
+				if err := wr.Close(); err != nil {
+					b.Fatalf("Closing parquet writer failed: %v", err)
+				}
 			}()
 		}
 	})
