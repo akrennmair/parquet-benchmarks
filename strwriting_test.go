@@ -14,6 +14,8 @@ import (
 	"github.com/fraugster/parquet-go/floor/interfaces"
 	"github.com/fraugster/parquet-go/parquet"
 	"github.com/fraugster/parquet-go/parquetschema"
+	parquet4 "github.com/segmentio/parquet-go"
+	"github.com/segmentio/parquet-go/compress/snappy"
 	parquet2 "github.com/xitongsys/parquet-go/parquet"
 	"github.com/xitongsys/parquet-go/writer"
 )
@@ -269,6 +271,37 @@ func BenchmarkStringWriting(b *testing.B) {
 				wordCol.Close()
 
 				defer rg.Close()
+			}()
+		}
+	})
+
+	b.Run("segmentio_parquet_go", func(b *testing.B) {
+		type record struct {
+			Word string `parquet:"word"`
+		}
+
+		for n := 0; n < b.N; n++ {
+			func() {
+				parquetFilename := prefix + "segmentio.parquet"
+
+				f, err := os.Create(parquetFilename)
+				if err != nil {
+					b.Fatalf("Creating %s failed: %v", parquetFilename, err)
+				}
+
+				wr := parquet4.NewWriter(f, parquet4.SchemaOf(new(record)), parquet4.Compression(&snappy.Codec{}))
+
+				for _, word := range words {
+					if err := wr.Write(&record{
+						Word: word,
+					}); err != nil {
+						b.Fatalf("Write failed: %v", err)
+					}
+				}
+
+				if err := wr.Close(); err != nil {
+					b.Fatalf("Closing parquet writer failed: %v", err)
+				}
 			}()
 		}
 	})
